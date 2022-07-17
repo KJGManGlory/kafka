@@ -298,6 +298,7 @@ public class Sender implements Runnable {
     void runOnce() {
         if (transactionManager != null) {
             try {
+                // 事务处理相关
                 transactionManager.maybeResolveSequences();
 
                 // do not continue sending if the transaction manager is in a failed state
@@ -324,13 +325,17 @@ public class Sender implements Runnable {
         }
 
         long currentTimeMs = time.milliseconds();
+        // 发送数据到 broker
         long pollTimeout = sendProducerData(currentTimeMs);
+        // 拉取响应结果
         client.poll(pollTimeout, currentTimeMs);
     }
 
     private long sendProducerData(long now) {
+        // 获取 broker 元数据: 节点, 分区
         Cluster cluster = metadata.fetch();
         // get the list of partitions with data ready to send
+        // 判断是否达到发送状态, 并将达到发送状态的节点封装返回
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
         // if there are any partitions whose leaders are not known yet, force metadata update
@@ -359,6 +364,7 @@ public class Sender implements Runnable {
 
         // create produce requests
         Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
+        // 将批次数据加入到 in-flight
         addToInflightBatches(batches);
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
@@ -836,8 +842,11 @@ public class Sender implements Runnable {
         RequestCompletionHandler callback = response -> handleProduceResponse(response, recordsByPartition, time.milliseconds());
 
         String nodeId = Integer.toString(destination);
+        // 创建客户端请求对象
         ClientRequest clientRequest = client.newClientRequest(nodeId, requestBuilder, now, acks != 0,
                 requestTimeoutMs, callback);
+
+        // 发送请求数据
         client.send(clientRequest, now);
         log.trace("Sent produce request to {}: {}", nodeId, requestBuilder);
     }

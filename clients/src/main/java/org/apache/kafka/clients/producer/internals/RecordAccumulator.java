@@ -448,26 +448,37 @@ public final class RecordAccumulator {
         Set<String> unknownLeaderTopics = new HashSet<>();
 
         boolean exhausted = this.free.queued() > 0;
+        // 遍历分区和双端队列
         for (Map.Entry<TopicPartition, Deque<ProducerBatch>> entry : this.batches.entrySet()) {
             Deque<ProducerBatch> deque = entry.getValue();
             synchronized (deque) {
                 // When producing to a large number of partitions, this path is hot and deques are often empty.
                 // We check whether a batch exists first to avoid the more expensive checks whenever possible.
+                // 双端队列头部获取数据
                 ProducerBatch batch = deque.peekFirst();
                 if (batch != null) {
                     TopicPartition part = entry.getKey();
+                    // 获取 broker 集群的 leader 节点
                     Node leader = cluster.leaderFor(part);
                     if (leader == null) {
                         // This is a partition for which leader is not known, but messages are available to send.
                         // Note that entries are currently not removed from batches when deque is empty.
+                        //
                         unknownLeaderTopics.add(part.topic());
                     } else if (!readyNodes.contains(leader) && !isMuted(part)) {
+                        // 消息等待时间
                         long waitedTimeMs = batch.waitedTimeMs(nowMs);
+                        // 重试的时间
                         boolean backingOff = batch.attempts() > 0 && waitedTimeMs < retryBackoffMs;
+                        // 消息等待的时间, 如果消息是重试消息, 则取重试等待的时间, 否则取 linger.ms
                         long timeToWaitMs = backingOff ? retryBackoffMs : lingerMs;
+                        // 判断队列是否满了
                         boolean full = deque.size() > 1 || batch.isFull();
+                        // 判断消息是否超过了等待的时间
                         boolean expired = waitedTimeMs >= timeToWaitMs;
+                        // 判断事务是否完成了
                         boolean transactionCompleting = transactionManager != null && transactionManager.isCompleting();
+                        // 判断是否达到发送状态
                         boolean sendable = full
                             || expired
                             || exhausted

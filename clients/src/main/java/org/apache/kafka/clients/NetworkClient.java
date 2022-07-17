@@ -513,6 +513,7 @@ public class NetworkClient implements KafkaClient {
                 clientRequest.apiKey(), header, clientRequest.requestTimeoutMs(), destination, request);
         }
         Send send = request.toSend(header);
+        // 构建 in-flight 对象
         InFlightRequest inFlightRequest = new InFlightRequest(
                 clientRequest,
                 header,
@@ -521,6 +522,7 @@ public class NetworkClient implements KafkaClient {
                 send,
                 now);
         this.inFlightRequests.add(inFlightRequest);
+        // 发送数据?
         selector.send(new NetworkSend(clientRequest.destination(), send));
     }
 
